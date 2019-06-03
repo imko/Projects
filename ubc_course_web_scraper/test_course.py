@@ -14,7 +14,7 @@ class TestCourse(unittest.TestCase):
 		pass
 
 	def setUp(self):
-		self.course = Course("LINK")
+		self.course = Course("LINK", "CPSC 110 100", "Lecture", "Computational Thinking")
 
 	def tearDown(self):
 		pass 
@@ -35,7 +35,7 @@ class TestCourse(unittest.TestCase):
 		self.assertEqual(self.course.instructor, instructor)
 		self.assertEqual(self.course.building, building)
 		self.assertEqual(self.course.room, room)
-		self.assertEqual(self.course.display_details(), "section: " + self.course.section + "\nactivity: " + self.course.activity + "\nterm: " + term + "\ndays: " + str(days) + "\nstart time: " + start_time + "\nend time: " + end_time + "\ninstructor: " + instructor + "\nbuilding: " + building + "\nroom: " + room)
+		self.assertEqual(self.course.display_details(), "link: " + self.course.link + "\nsection id: " + self.course.section_id + "\nactivity: " + self.course.activity + "\ncourse name: " + self.course.course_name + "\nterm: " + term + "\ndays: " + str(days) + "\nstart time: " + start_time + "\nend time: " + end_time + "\ninstructor: " + instructor + "\nbuilding: " + building + "\nroom: " + room)
 
 	def test_set_seat_summary(self):
 		total_seats_remaining = "200"

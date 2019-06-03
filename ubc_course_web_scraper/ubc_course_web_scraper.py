@@ -39,68 +39,69 @@ def init_course(page, link):
 base_url = "https://courses.students.ubc.ca"
 
 # todo: testing url 
-url = "https://courses.students.ubc.ca/cs/courseschedule?pname=subjarea&tname=subj-department&dept=CPSC"
+url = "https://courses.students.ubc.ca/cs/courseschedule?sesscd=S&tname=subj-department&sessyr=2019&dept=CPSC&pname=subjarea"
 driver = webdriver.Chrome() 
 driver.get(url)
 
 page = soup(driver.page_source, "html.parser") 
 courses_table = page.find("tbody") # fetch courses of specific subject 
 
-# todo: for testing 
-# print(driver.current_url)
-# driver.find_element_by_link_text("CPSC 103").click() 
-# print(driver.current_url)
-
 subject_dict = {} 
-
+for course in courses_table.contents:
 # testing: update with iteration once done with a single course 
-course = courses_table.contents[1]
-if isinstance(course, element.Tag):
-	course_link = base_url + course.find("a")["href"] 
-	course_id = course.find("a").text 
+# course = courses_table.contents[1]
+	if isinstance(course, element.Tag):
+		course_link = base_url + course.find("a")["href"] 
+		course_id = course.find("a").text 
 
-	# click on every course to view all course sections 
-	driver.find_element_by_link_text(course_id).click() 
-	page = soup(driver.page_source, "html.parser")
-	sections_table = page.find("tbody") # fetch all sections of specific course 
+		# click on every course to view all course sections 
+		driver.find_element_by_link_text(course_id).click() 
+		page = soup(driver.page_source, "html.parser")
+		sections_table = page.find("tbody") # fetch all sections of specific course 
 
-	sections = [] 
+		sections = [] 
+		for section in sections_table:
+			# check if current section is an HTML element tag 
+			if isinstance(section, element.Tag): 
+				# TODO: fix cases when there's 2 different links to the same course 
+				try: 
+					link = base_url + section.find("a")["href"]
 
-	for section in sections_table:
-	# testing: first section of the course; update with iteration once done with a single section 
-	# section = sections_table.contents[0]
-		if isinstance(section, element.Tag): 
-			section_id = section.find("a").text
-			link = base_url + section.find("a")["href"]
+					# click on every section to view the detail 
+					driver.find_element_by_link_text(section.find("a").text).click() 
+					page = soup(driver.page_source, "html.parser")
 
-			# click on every section to view the detail 
-			driver.find_element_by_link_text(section_id).click() 
-			page = soup(driver.page_source, "html.parser")
+					course = init_course(page, link)
 
-			course = init_course(page, link)
-			# fetch the table with course detail 
-			for detail in page.find_all("table", {"class": "table table-striped"}):
-				# fetch instructor table 
-				instructor = str(page.select("body > div.container > div.content.expand > table:nth-child(18) > tbody > tr")[0].text).split(":")[-1].strip()
-				# fetch all columns from the table
-				columns = detail.find("tbody").find("tr").contents
-				enter_details(course, instructor, columns) 
+					# fetch the table with course detail 
+					for detail in page.find_all("table", {"class": "table table-striped"}):
+						# fetch instructor table 
+						instructor = str(page.select("body > div.container > div.content.expand > table:nth-child(18) > tbody > tr")[0].text).split(":")[-1].strip()
+						
+						# fetch all columns from the table
+						columns = detail.find("tbody").find("tr").contents
+						enter_details(course, instructor, columns) 
 
-			# fetch the table with seating summary 
-			for summary in page.find_all("table", {"class": "'table"}): 
-				seats = summary.find("tbody").find_all("tr")
-				enter_seat_summary(course, seats)
+					# fetch the table with seating summary 
+					for summary in page.find_all("table", {"class": "'table"}): 
+						seats = summary.find("tbody").find_all("tr")
+						enter_seat_summary(course, seats)
 
-			# add course to the list of course sections 
-			sections.append(course) 
+					# add course to the list of course sections 
+					sections.append(course) 
 
-			# go back to previous page (ie. page of list of sections)
-			driver.back() 
+					# TESTING 
+					print(str(link) + " --> Successful")
+					
+					# go back to previous page (ie. page of list of sections)
+					driver.back() 
+				except: 
+					continue 
 
-# add list of course sections to the course dictionary 
-subject_dict["CPSC"] = sections 
+		# add list of course sections to the course dictionary 
+		subject_dict["CPSC"] = sections 
 
-for section in sections: 
-	print(str(section) + "\n")
+		# go back to previous page (ie. page of list of courses)
+		driver.back()
 
 driver.quit() 
