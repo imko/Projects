@@ -8,13 +8,14 @@ class Course():
 		self.activity = activity
 		self.course_name = course_name
 
-	def set_details(self, term, days, start_time, end_time, instructor, building, room): 
+	def set_details(self, term, days, start_time, end_time, instructors, building, room): 
 		"""Update and set course details"""
 		self.term = term
 		self.days = days 
 		self.start_time = start_time 
 		self.end_time = end_time 
-		self.instructor = instructor 
+		self.instructors = instructors[0] 
+		self.tas = instructors[1]
 		self.building = building
 		self.room = room 
 
@@ -27,7 +28,7 @@ class Course():
 
 	def display_details(self): 
 		"""Return string representation of the course details"""
-		return "link: " + self.link + "\nsection id: " + self.section_id + "\nactivity: " + self.activity + "\ncourse name: " + self.course_name + "\nterm: " + self.term + "\ndays: " + str(self.days) + "\nstart time: " + self.start_time + "\nend time: " + self.end_time + "\ninstructor: " + self.instructor + "\nbuilding: " + self.building + "\nroom: " + self.room 
+		return "link: " + self.link + "\nsection id: " + self.section_id + "\nactivity: " + self.activity + "\ncourse name: " + self.course_name + "\nterm: " + str(self.term) + "\ndays: " + str(self.days) + "\nstart time: " + str(self.start_time) + "\nend time: " + str(self.end_time) + "\ninstructor: " + str(self.instructors) + "\nta: " + str(self.tas) + "\nbuilding: " + str(self.building) + "\nroom: " + str(self.room) 
 
 	def display_seat_summary(self): 
 		"""Return string representation of the course seat summary"""
