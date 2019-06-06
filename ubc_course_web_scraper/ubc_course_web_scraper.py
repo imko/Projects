@@ -4,6 +4,7 @@ from bs4 import element
 from bs4 import BeautifulSoup as soup 
 from urllib.request import urlopen 
 import re 
+import collections
 
 # testing 
 import traceback 
@@ -22,9 +23,12 @@ def enter_details(course, instructors, details):
 
 		course.set_schedule(term, days, start_time, end_time, instructors, building, room)
 
-def enter_seat_summary(course, seats): 
+def enter_seat_summary(course, seats, has_seat_summary): 
 	"""Enter seat summary of the given course"""
-	course.set_seat_summary(seats[0], seats[1], seats[2], seats[3])
+	if has_seat_summary:
+		course.set_seat_summary(seats[0], seats[1], seats[2], seats[3])
+	else:
+		course.set_seat_summary(None, None, None, None)
 
 def init_course(page, link):
 	"""Initialize Course with section_id, activity, course_name, and link to the course"""
@@ -35,107 +39,119 @@ def init_course(page, link):
 
 	return Course(link, section_id, activity, course_name)
 
-def get_instructors(driver): 
+def get_instructors(driver, has_detail_table): 
 	"""Find instructors and return in a tuple"""
-	instructor_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[3]")
+	if has_detail_table:
+		instructor_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[3]") 
+	else:
+		instructor_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]")
+
 	instructors = re.split(":|\n", str(instructor_table.text))
+
+	index_instructor = None 
 	try: 
-		index_instructor = instructors.index("Instructor")
+		index_instructor = instructors.index("Instructor") 
 		index_ta = instructors.index("TA")
 		instructor_list = [s.strip() for s in instructors[index_instructor+1:index_ta]]
 		ta_list = [s.strip() for s in instructors[index_ta+1:]]
 	except:
-		instructor_list = [s.strip() for s in instructors[index_instructor+1:]]
+		instructor_list = [s.strip() for s in instructors[index_instructor+1:]] if index_instructor else None  
 		ta_list = None 
-	
+
 	return (instructor_list, ta_list)
 
 # main 
 base_url = "https://courses.students.ubc.ca"
-
+url = "https://courses.students.ubc.ca/cs/courseschedule?tname=subj-all-departments&sessyr=2019&sesscd=S&pname=subjarea"
 # TODO: fix when single subject works 
-url = "https://courses.students.ubc.ca/cs/courseschedule?sesscd=S&tname=subj-department&sessyr=2019&dept=CPSC&pname=subjarea"
+# url = "https://courses.students.ubc.ca/cs/courseschedule?sesscd=S&tname=subj-department&sessyr=2019&dept=CPSC&pname=subjarea"
 driver = webdriver.Chrome() 
 driver.get(url)
 
-page = soup(driver.page_source, "html.parser") 
-courses_table = page.find("tbody") # fetch courses of specific subject 
+subject_links = {}
+subject_table = driver.find_element_by_xpath("//*[@id=\"mainTable\"]/tbody")
+for subject in subject_table.find_elements_by_xpath("./tr/td/a[@href]"): 
+	subject_links[subject.text.split()[0]] = subject.get_attribute("href")
 
-# TODO: fix cases when there's 2 different links to the same course AND work placements 
+ordered_subject_links = collections.OrderedDict(sorted(subject_links.items()))
 subject_dict = {} 
-for course in courses_table.contents:
-	if isinstance(course, element.Tag):
-		course_link = base_url + course.find("a")["href"] 
-		course_id = course.find("a").text 
-		# click on every course to view all course sections 
-		driver.find_element_by_link_text(course_id).click() 
-		page = soup(driver.page_source, "html.parser")
-		sections_table = page.find("tbody") # fetch all sections of specific course 
+for subject, subject_link in ordered_subject_links.items(): 
+	driver.get(subject_link)
+	page = soup(driver.page_source, "html.parser") 
 
+	# fetch all the links to the courses 
+	course_links = {}
+	courses_table = driver.find_element_by_xpath("//*[@id=\"mainTable\"]/tbody")
+	for course in courses_table.find_elements_by_xpath("./tr/td/a[@href]"): 
+		course_links[course.text] = course.get_attribute("href") 
+
+	ordered_course_links = collections.OrderedDict(sorted(course_links.items())) 
+	# click every course link in the list 
+	for course, course_link in ordered_course_links.items(): 
+		driver.get(course_link) 
+		page = soup(driver.page_source, "html.parser") 
+
+		# fetch all the links to the sections 
+		section_links = {} 
+		section_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
+		for section in section_table.find_elements_by_xpath("./tr/td/a[@href]"): 
+			section_links[section.text] = section.get_attribute("href") 
+
+		ordered_section_links = collections.OrderedDict(sorted(section_links.items())) 
+		# click every section link in the list 
 		sections = [] 
-		for section in sections_table:
-			# check if current section is an HTML element tag 
-			if isinstance(section, element.Tag): 
-				try: 
-					link = base_url + section.find("a")["href"]
+		for section, section_link in ordered_section_links.items(): 
+			driver.get(section_link) 
+			page = soup(driver.page_source, "html.parser") 
 
-					# click on every section to view the detail 
-					driver.find_element_by_link_text(section.find("a").text).click() 
-					page = soup(driver.page_source, "html.parser")
+			course = init_course(page, section_link) 
 
-					course = init_course(page, link)
+			# fetch the table with course detail 
+			detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
 
-					# fetch the table with course detail 
-					detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody")
-					# make a list of list of needed info 
-					details = [] 
-					for tr in detail_table.find_elements_by_xpath("./tr"):
-						info = []
-						for td in tr.find_elements_by_xpath("./td"):
-							info.append(td.text) 
-						details.append(info)
-
-					enter_details(course, get_instructors(driver), details)
-
-					# for detail in page.find_all("table", {"class": "table table-striped"}):
-					# 	instructors = get_instructors(driver)
-
-					# 	# fetch all details from the table
-					# 	details = detail.find("tbody").find("tr").contents
-						
-					# 	enter_details(course, instructors, details) 
-
-					# 	# fetch the table with seating summary 
+			# make a list of list of needed info 
+			details = [] 
+			for tr in detail_table.find_elements_by_xpath("./tr"): 
+				info = [] 
+				for td in tr.find_elements_by_xpath("./td"): 
+					info.append(td.text) 
+				if len(info) == 6: 
+					details.append(info) 
+				else: 
+					break
+			has_detail_table = False if len(details) <= 0 else True 
+			
+			# check if the course does NOT have detail table 
+			seats = [] 
+			try: 
+				if has_detail_table: 
 					summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[4]/tbody") 
-					seats = [] 
-					for tr in summary_table.find_elements_by_xpath("./tr"): 
-						for td, k in enumerate(tr.find_elements_by_xpath("./td")): 
-							if td == 1:
-								seats.append(k.text) 
-					enter_seat_summary(course, seats) 
+				else: 
+					details = [[None, None, None, None, None, None]] 
+					summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[3]/tbody") 
 
-					# 	for summary in page.find_all("table", {"class": "'table"}): 
-					# 		seats = summary.find("tbody").find_all("tr")
-					# 		enter_seat_summary(course, seats)
+				has_seat_summary = True 
+				for tr in summary_table.find_elements_by_xpath("./tr"): 
+					for td, k in enumerate(tr.find_elements_by_xpath("./td")): 
+						if td == 1: 
+							seats.append(k.text) 
+				if len(seats) < 4: 
+					has_seat_summary = False 
+			except: 
+				continue 
 
-					# add course to the list of course sections 
-					sections.append(course) 
+			enter_details(course, get_instructors(driver, has_detail_table), details) 
+			enter_seat_summary(course, seats, has_seat_summary) 
 
-					# TESTING 
-					print(str(link) + " --> Successful")
-					print(str(course) + "\n")
+			# add course to the list of course sections 
+			sections.append(course) 
 
-					# go back to previous page (ie. page of list of sections)
-					driver.back() 
-				except: 
-					# print(traceback.format_exc()) # testing for course with more than one row 
-					continue 
+			# TESTING 
+			print(str(section) + str(course.schedules) + " --> Successful") 
 
-		# TODO: fix 'key' when single subject works
-		# add list of course sections to the course dictionary 
-		subject_dict["CPSC"] = sections 
+			# go back to previous page (ie. page of list of sections) 
+			driver.back() 
 
-		# go back to previous page (ie. page of list of courses)
-		driver.back()
+	driver.back() 
 
 driver.quit() 
