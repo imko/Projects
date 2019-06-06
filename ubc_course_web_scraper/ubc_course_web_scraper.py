@@ -5,27 +5,26 @@ from bs4 import BeautifulSoup as soup
 from urllib.request import urlopen 
 import re 
 
+# testing 
+import traceback 
+
 from course import Course 
 
-def enter_details(course, instructors, columns):
+def enter_details(course, instructors, details):
 	"""Enter details of the given course"""
-	term = str(columns[0].string).strip() if str(columns[0].string).strip() else None 
-	day = str(columns[1].string).strip().split() if len(str(columns[1].string).strip().split()) > 0 else None 
-	start_time = str(columns[2].string).strip() if str(columns[2].string).strip() else None
-	end_time = str(columns[3].string).strip() if str(columns[3].string).strip() else None
-	building = str(columns[4].string).strip() if str(columns[4].string).strip() else None 
-	room = str(columns[5].string).strip() if str(columns[5].string).strip() else None 
+	for info in details: 
+		term = str(info[0]).strip() if str(info[0]).strip() else None 
+		days = str(info[1]).strip() if str(info[1]).strip() else None 
+		start_time = str(info[2]).strip() if str(info[2]).strip() else None
+		end_time = str(info[3]).strip() if str(info[3]).strip() else None
+		building = str(info[4]).strip() if str(info[4]).strip() else None 
+		room = str(info[5]).strip() if str(info[5]).strip() else None 
 
-	course.set_details(term, day, start_time, end_time, instructors, building, room)
+		course.set_schedule(term, days, start_time, end_time, instructors, building, room)
 
 def enter_seat_summary(course, seats): 
 	"""Enter seat summary of the given course"""
-	total_seats_remaining = str(seats[0].text).split(":")[-1]
-	currently_registered = str(seats[1].text).split(":")[-1]
-	general_seats_remaining = str(seats[2].text).split(":")[-1]
-	restricted_seats_remaining = str(seats[3].text).split(":")[-1]
-	
-	course.set_seat_summary(total_seats_remaining, currently_registered, general_seats_remaining, restricted_seats_remaining)
+	course.set_seat_summary(seats[0], seats[1], seats[2], seats[3])
 
 def init_course(page, link):
 	"""Initialize Course with section_id, activity, course_name, and link to the course"""
@@ -54,7 +53,7 @@ def get_instructors(driver):
 # main 
 base_url = "https://courses.students.ubc.ca"
 
-# todo: testing url 
+# TODO: fix when single subject works 
 url = "https://courses.students.ubc.ca/cs/courseschedule?sesscd=S&tname=subj-department&sessyr=2019&dept=CPSC&pname=subjarea"
 driver = webdriver.Chrome() 
 driver.get(url)
@@ -62,15 +61,12 @@ driver.get(url)
 page = soup(driver.page_source, "html.parser") 
 courses_table = page.find("tbody") # fetch courses of specific subject 
 
-
-
 # TODO: fix cases when there's 2 different links to the same course AND work placements 
 subject_dict = {} 
 for course in courses_table.contents:
 	if isinstance(course, element.Tag):
 		course_link = base_url + course.find("a")["href"] 
 		course_id = course.find("a").text 
-
 		# click on every course to view all course sections 
 		driver.find_element_by_link_text(course_id).click() 
 		page = soup(driver.page_source, "html.parser")
@@ -80,7 +76,6 @@ for course in courses_table.contents:
 		for section in sections_table:
 			# check if current section is an HTML element tag 
 			if isinstance(section, element.Tag): 
-				# TODO: fix cases when there's 2 different links to the same course AND work placements 
 				try: 
 					link = base_url + section.find("a")["href"]
 
@@ -91,18 +86,37 @@ for course in courses_table.contents:
 					course = init_course(page, link)
 
 					# fetch the table with course detail 
-					for detail in page.find_all("table", {"class": "table table-striped"}):
-						instructors = get_instructors(driver)
+					detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody")
+					# make a list of list of needed info 
+					details = [] 
+					for tr in detail_table.find_elements_by_xpath("./tr"):
+						info = []
+						for td in tr.find_elements_by_xpath("./td"):
+							info.append(td.text) 
+						details.append(info)
 
-						# fetch all columns from the table
-						columns = detail.find("tbody").find("tr").contents
+					enter_details(course, get_instructors(driver), details)
+
+					# for detail in page.find_all("table", {"class": "table table-striped"}):
+					# 	instructors = get_instructors(driver)
+
+					# 	# fetch all details from the table
+					# 	details = detail.find("tbody").find("tr").contents
 						
-						enter_details(course, instructors, columns) 
+					# 	enter_details(course, instructors, details) 
 
-						# fetch the table with seating summary 
-						for summary in page.find_all("table", {"class": "'table"}): 
-							seats = summary.find("tbody").find_all("tr")
-							enter_seat_summary(course, seats)
+					# 	# fetch the table with seating summary 
+					summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[4]/tbody") 
+					seats = [] 
+					for tr in summary_table.find_elements_by_xpath("./tr"): 
+						for td, k in enumerate(tr.find_elements_by_xpath("./td")): 
+							if td == 1:
+								seats.append(k.text) 
+					enter_seat_summary(course, seats) 
+
+					# 	for summary in page.find_all("table", {"class": "'table"}): 
+					# 		seats = summary.find("tbody").find_all("tr")
+					# 		enter_seat_summary(course, seats)
 
 					# add course to the list of course sections 
 					sections.append(course) 
@@ -114,8 +128,10 @@ for course in courses_table.contents:
 					# go back to previous page (ie. page of list of sections)
 					driver.back() 
 				except: 
+					# print(traceback.format_exc()) # testing for course with more than one row 
 					continue 
 
+		# TODO: fix 'key' when single subject works
 		# add list of course sections to the course dictionary 
 		subject_dict["CPSC"] = sections 
 

@@ -1,39 +1,62 @@
 class Course(): 
 	"""Course class that contains all important information"""
 
-	def __init__(self, link, section_id, activity, course_name): 
+	def __init__(self, link, section, activity, course_name): 
 		"""Initialize course link"""
+		self.schedules = []
+		self.instructors = [] 
 		self.link = link
-		self.section_id = section_id 
+		self.section = section 
 		self.activity = activity
 		self.course_name = course_name
 
-	def set_details(self, term, days, start_time, end_time, instructors, building, room): 
+	def set_schedule(self, term, days, start_time, end_time, instructors, building, room): 
 		"""Update and set course details"""
 		self.term = term
-		self.days = days 
-		self.start_time = start_time 
-		self.end_time = end_time 
-		self.instructors = instructors[0] 
-		self.tas = instructors[1]
-		self.building = building
-		self.room = room 
+		self.schedules.append(
+			{
+				days:
+				{
+					"start_time": start_time,
+					"end_time": end_time,
+					"instructor": instructors[0],
+					"ta": instructors[1],
+					"building": building, 
+					"room": room,
+				}
+			}
+		)
 
 	def set_seat_summary(self, total_seats_remaining, currently_registered, general_seats_remaining, restricted_seats_remaining):
 		"""Update and set seat summary of the course"""
-		self.total_seats_remaining = total_seats_remaining 
-		self.currently_registered = currently_registered 
-		self.general_seats_remaining = general_seats_remaining 
-		self.restricted_seats_remaining = restricted_seats_remaining  
+		self.seat_summary = {
+			"total_seats_remaining": total_seats_remaining,
+			"currently_registered": currently_registered, 
+			"general_seats_remaining": general_seats_remaining, 
+			"restricted_seats_remaining": restricted_seats_remaining,
+		}
 
+	def display_schedule(self): 
+		"""Return string representation of the course days with start time and end time"""
+		msg = ""
+		for schedule in self.schedules: 
+			for day, info in schedule.items(): 
+				msg += str(day) + " --> " + str(info) + "\n"
+
+		return msg 
+		
 	def display_details(self): 
 		"""Return string representation of the course details"""
-		return "link: " + self.link + "\nsection id: " + self.section_id + "\nactivity: " + self.activity + "\ncourse name: " + self.course_name + "\nterm: " + str(self.term) + "\ndays: " + str(self.days) + "\nstart time: " + str(self.start_time) + "\nend time: " + str(self.end_time) + "\ninstructor: " + str(self.instructors) + "\nta: " + str(self.tas) + "\nbuilding: " + str(self.building) + "\nroom: " + str(self.room) 
+		return "LINK: " + self.link + "\nSECTION: " + self.section + "\nACTIVITY: " + self.activity + "\nCOURSE NAME: " + self.course_name + "\nTERM: " + str(self.term) + "\n" + self.display_schedule() 
 
 	def display_seat_summary(self): 
 		"""Return string representation of the course seat summary"""
-		return "total seats remaining: " + self.total_seats_remaining + "\ncurrently registered: " + self.currently_registered + "\ngeneral seats remaining: " + self.general_seats_remaining + "\nrestricted seats remaining: " + self.restricted_seats_remaining 
+		msg = "" 
+		for title, value in self.seat_summary.items(): 
+			msg += str(title) + ": " + str(value) + "\n"
+
+		return msg 
 
 	def __str__(self): 
 		"""Return string representation of the course details AND seat summary"""
-		return self.display_details() + "\n" + self.display_seat_summary() 
+		return self.display_details() + self.display_seat_summary() 
