@@ -5,11 +5,26 @@ from bs4 import BeautifulSoup as soup
 from urllib.request import urlopen 
 import re 
 import collections
-
-# testing 
-import traceback 
+import xlwt 
+from xlwt import Workbook 
 
 from course import Course 
+
+def init_course(page, link):
+	"""Initialize Course with section_id, activity, course_name, and link to the course"""
+	pivot = -1 if len(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()) < 5 else -2 
+	section_id = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[:pivot])
+	activity = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[pivot:])[1:-1]
+	course_name = page.select("body > div.container > div.content.expand > h5")[0].text
+
+	return Course(link, section_id, activity, course_name)
+
+def init_workbook():
+	"""Initialize workbook for saving data"""
+	workbook = Workbook() 
+	sheet = workbook.add_sheet("Sheet 1") 
+
+	return workbook, sheet, 0 	
 
 def enter_details(course, instructors, details):
 	"""Enter details of the given course"""
@@ -25,22 +40,18 @@ def enter_details(course, instructors, details):
 
 def enter_seat_summary(course, seats, has_seat_summary): 
 	"""Enter seat summary of the given course"""
-	if has_seat_summary:
-		course.set_seat_summary(seats[0], seats[1], seats[2], seats[3])
-	else:
+	# check for no instructor table 
+	try: 
+		if has_seat_summary:
+			course.set_seat_summary(seats[0], seats[1], seats[2], seats[3])
+		else:
+			course.set_seat_summary(None, None, None, None)
+	except: 
 		course.set_seat_summary(None, None, None, None)
-
-def init_course(page, link):
-	"""Initialize Course with section_id, activity, course_name, and link to the course"""
-	pivot = -1 if len(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()) < 5 else -2 
-	section_id = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[:pivot])
-	activity = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[pivot:])[1:-1]
-	course_name = page.select("body > div.container > div.content.expand > h5")[0].text
-
-	return Course(link, section_id, activity, course_name)
 
 def get_instructors(driver, has_detail_table): 
 	"""Find instructors and return in a tuple"""
+	has_instructor_table = True 
 	if has_detail_table:
 		instructor_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[3]") 
 	else:
@@ -54,104 +65,220 @@ def get_instructors(driver, has_detail_table):
 		index_ta = instructors.index("TA")
 		instructor_list = [s.strip() for s in instructors[index_instructor+1:index_ta]]
 		ta_list = [s.strip() for s in instructors[index_ta+1:]]
-	except:
-		instructor_list = [s.strip() for s in instructors[index_instructor+1:]] if index_instructor else None  
+	except: 
+		# TA is not found in the table 
+		instructor_list = [s.strip() for s in instructors[index_instructor+1:]] if index_instructor is not None else None  
 		ta_list = None 
 
 	return (instructor_list, ta_list)
 
-# main 
-base_url = "https://courses.students.ubc.ca"
-url = "https://courses.students.ubc.ca/cs/courseschedule?tname=subj-all-departments&sessyr=2019&sesscd=S&pname=subjarea"
-# TODO: fix when single subject works 
-# url = "https://courses.students.ubc.ca/cs/courseschedule?sesscd=S&tname=subj-department&sessyr=2019&dept=CPSC&pname=subjarea"
-driver = webdriver.Chrome() 
-driver.get(url)
+def write_excel_headers(row, sheet):
+	"""Write headers of the information"""
+	sheet.write(row, 0, "TERM")
+	sheet.write(row, 1, "SECTION")
+	sheet.write(row, 2, "COURSE NAME")
+	sheet.write(row, 3, "ACTIVITY")
+	sheet.write(row, 4, "DAYS")
+	sheet.write(row, 5, "START TIME")
+	sheet.write(row, 6, "END TIME")
+	sheet.write(row, 7, "INSTRUCTOR")
+	sheet.write(row, 8, "TA")
+	sheet.write(row, 9, "LOCATION")
+	sheet.write(row, 10, "TOTAL SEATS REMAINING")
+	sheet.write(row, 11, "CURRENTLY REGISTERED")
+	sheet.write(row, 12, "GENERAL SEATS REMAINING")
+	sheet.write(row, 13, "RESTRICTED SEATS REMAINING")
 
-subject_links = {}
-subject_table = driver.find_element_by_xpath("//*[@id=\"mainTable\"]/tbody")
-for subject in subject_table.find_elements_by_xpath("./tr/td/a[@href]"): 
-	subject_links[subject.text.split()[0]] = subject.get_attribute("href")
+	return row + 1 
 
-ordered_subject_links = collections.OrderedDict(sorted(subject_links.items()))
-subject_dict = {} 
-for subject, subject_link in ordered_subject_links.items(): 
-	driver.get(subject_link)
-	page = soup(driver.page_source, "html.parser") 
+def write_course_info(course, row, sheet): 
+	"""Write course info with give row of the excel file"""
+	sheet.write(row, 0, course.term)
+	sheet.write(row, 1, course.section)
+	sheet.write(row, 2, course.course_name)
+	sheet.write(row, 3, course.activity)
+	sheet.write(row, 10, course.seat_summary["total_seats_remaining"])
+	sheet.write(row, 11, course.seat_summary["currently_registered"])
+	sheet.write(row, 12, course.seat_summary["general_seats_remaining"])
+	sheet.write(row, 13, course.seat_summary["restricted_seats_remaining"])
+	
+	# loop through schedule for possible multiple schedules 
+	for i in range(len(course.schedules)):
+		offset = tmp_offset = 1
+		for day, info in course.schedules[i].items(): 
+			sheet.write(row+offset-1, 4, str(day))
+			sheet.write(row+offset-1, 5, str(info["start_time"]))
+			sheet.write(row+offset-1, 6, str(info["end_time"]))
+			if info["instructor"] is not None:
+				for j in range(len(info["instructor"])):
+					sheet.write(row+offset+j-1, 7, str(info["instructor"][j]))
+				# check if offset needs to be updated 
+				tmp_offset = len(info["instructor"]) if len(info["instructor"]) > offset else offset 
+			else:
+				sheet.write(row, 7, str(info["instructor"]))
+			if info["ta"] is not None: 
+				for j in range(len(info["ta"])):
+					sheet.write(row+offset+j-1, 8, str(info["ta"][j])) 
+				# check if offset needs to be updated 
+				tmp_offset = len(info["ta"]) if len(info["ta"]) > tmp_offset else tmp_offset 
+			else: 
+				sheet.write(row, 8, str(info["ta"]))
+			sheet.write(row+offset-1, 9, str(info["building"]) + ", " + str(info["room"]))
+		# check if offset needs to be updated or not 
+		if tmp_offset != offset:
+			offset = tmp_offset
+		row += offset 
 
-	# fetch all the links to the courses 
+	return row
+
+def write_to_excel_sheet(course, row, sheet): 
+	"""Write course info in excel file"""
+	if row == 0: 
+		row = write_excel_headers(row, sheet) 
+	else: 
+		row = write_course_info(course, row, sheet)
+
+	return row
+
+def fetch_section_links(driver):
+	"""Fetch all section links"""
+	section_links = {} 
+	section_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
+	for section in section_table.find_elements_by_xpath("./tr/td/a[@href]"): 
+		section_links[section.text] = section.get_attribute("href") 
+
+	return section_links
+
+def fetch_course_links(driver): 
+	"""Fetch all course links"""
 	course_links = {}
 	courses_table = driver.find_element_by_xpath("//*[@id=\"mainTable\"]/tbody")
 	for course in courses_table.find_elements_by_xpath("./tr/td/a[@href]"): 
 		course_links[course.text] = course.get_attribute("href") 
 
-	ordered_course_links = collections.OrderedDict(sorted(course_links.items())) 
+	return course_links 
+
+def fetch_subject_links(driver):
+	"""Fetch all subject links"""
+	subject_links = {}
+	subject_table = driver.find_element_by_xpath("//*[@id=\"mainTable\"]/tbody")
+	for subject in subject_table.find_elements_by_xpath("./tr/td/a[@href]"): 
+		subject_links[subject.text.split()[0]] = subject.get_attribute("href")
+
+	return subject_links 
+
+def fetch_details(detail_table):
+	"""Fetch a list of details and return true if the list exists, false otherwise"""
+	details = [] 
+	for tr in detail_table.find_elements_by_xpath("./tr"): 
+		info = [] 
+		for td in tr.find_elements_by_xpath("./td"): 
+			info.append(td.text) 
+		# check if it's valid detail table 
+		if len(info) == 6: 
+			details.append(info) 
+		else: 
+			break
+	# no detail table if details list is empty 
+	has_detail_table = False if len(details) <= 0 else True 
+
+	return details, has_detail_table
+
+def click_link(driver, subject_link): 
+	"""Click on the link and return soup"""
+	driver.get(subject_link) 
+	return soup(driver.page_source, "html.parser") 
+
+def update_course_detail(driver, course, details, has_detail_table): 
+	"""Check and update course detail and return course"""
+	seats = [] 
+	instructors = (None, None)
+	has_seat_summary = True 
+	try: 
+		if has_detail_table: 
+			summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[4]/tbody") 
+		else: 
+			details = [[None, None, None, None, None, None]] 
+			summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[3]/tbody") 
+
+		for tr in summary_table.find_elements_by_xpath("./tr"): 
+			for td, k in enumerate(tr.find_elements_by_xpath("./td")): 
+				if td == 1: 
+					seats.append(k.text) 
+		if len(seats) < 4: 
+			has_seat_summary = False 
+
+		instructors = get_instructors(driver, has_detail_table) 
+	except: 
+		pass 
+
+	enter_details(course, instructors, details) 
+	enter_seat_summary(course, seats, has_seat_summary) 
+
+	return course 
+
+# main 
+base_url = "https://courses.students.ubc.ca"
+url = "https://courses.students.ubc.ca/cs/courseschedule?tname=subj-all-departments&sessyr=2019&sesscd=S&pname=subjarea"
+
+# initialize workbook
+workbook, sheet, row = init_workbook() 
+
+# open the website 
+driver = webdriver.Chrome() 
+driver.get(url)
+
+# fetch every link of the subjects 
+subject_links = fetch_subject_links(driver)
+
+# click the subject link 
+subject_dict = {} 
+ordered_subject_links = collections.OrderedDict(sorted(subject_links.items()))
+for subject, subject_link in ordered_subject_links.items(): 
+	# click on the link
+	page = click_link(driver, subject_link)
+
+	# fetch all the links to the courses 
+	course_links = fetch_course_links(driver)
+
 	# click every course link in the list 
+	ordered_course_links = collections.OrderedDict(sorted(course_links.items())) 
 	for course, course_link in ordered_course_links.items(): 
-		driver.get(course_link) 
-		page = soup(driver.page_source, "html.parser") 
+		# click on the link
+		page = click_link(driver, course_link)
 
 		# fetch all the links to the sections 
-		section_links = {} 
-		section_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
-		for section in section_table.find_elements_by_xpath("./tr/td/a[@href]"): 
-			section_links[section.text] = section.get_attribute("href") 
+		section_links = fetch_section_links(driver)
 
-		ordered_section_links = collections.OrderedDict(sorted(section_links.items())) 
 		# click every section link in the list 
 		sections = [] 
+		ordered_section_links = collections.OrderedDict(sorted(section_links.items())) 
 		for section, section_link in ordered_section_links.items(): 
-			driver.get(section_link) 
-			page = soup(driver.page_source, "html.parser") 
+			page = click_link(driver, section_link)
 
 			course = init_course(page, section_link) 
 
 			# fetch the table with course detail 
 			detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
 
-			# make a list of list of needed info 
-			details = [] 
-			for tr in detail_table.find_elements_by_xpath("./tr"): 
-				info = [] 
-				for td in tr.find_elements_by_xpath("./td"): 
-					info.append(td.text) 
-				if len(info) == 6: 
-					details.append(info) 
-				else: 
-					break
-			has_detail_table = False if len(details) <= 0 else True 
+			# fetch a list of details and check if detail table is present 
+			details, has_detail_table = fetch_details(detail_table)
 			
 			# check if the course does NOT have detail table 
-			seats = [] 
-			try: 
-				if has_detail_table: 
-					summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[4]/tbody") 
-				else: 
-					details = [[None, None, None, None, None, None]] 
-					summary_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[3]/tbody") 
-
-				has_seat_summary = True 
-				for tr in summary_table.find_elements_by_xpath("./tr"): 
-					for td, k in enumerate(tr.find_elements_by_xpath("./td")): 
-						if td == 1: 
-							seats.append(k.text) 
-				if len(seats) < 4: 
-					has_seat_summary = False 
-			except: 
-				continue 
-
-			enter_details(course, get_instructors(driver, has_detail_table), details) 
-			enter_seat_summary(course, seats, has_seat_summary) 
-
 			# add course to the list of course sections 
-			sections.append(course) 
+			sections.append(update_course_detail(driver, course, details, has_detail_table))
 
+			# write to excel sheet 
+			row = write_to_excel_sheet(course, row, sheet) 
+			
 			# TESTING 
 			print(str(section) + str(course.schedules) + " --> Successful") 
 
 			# go back to previous page (ie. page of list of sections) 
 			driver.back() 
 
+	# save to excel file every subject 
+	workbook.save("ubc_course_data.xls")
 	driver.back() 
 
 driver.quit() 
