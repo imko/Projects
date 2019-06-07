@@ -10,14 +10,14 @@ from xlwt import Workbook
 
 from course import Course 
 
-def init_course(page, link):
+def init_course(page, section_link, course_grades_link) :
 	"""Initialize Course with section_id, activity, course_name, and link to the course"""
 	pivot = -1 if len(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()) < 5 else -2 
 	section_id = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[:pivot])
 	activity = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[pivot:])[1:-1]
 	course_name = page.select("body > div.container > div.content.expand > h5")[0].text
 
-	return Course(link, section_id, activity, course_name)
+	return Course(section_link, section_id, activity, course_name, course_grades_link)
 
 def init_workbook():
 	"""Initialize workbook for saving data"""
@@ -84,10 +84,11 @@ def write_excel_headers(row, sheet):
 	sheet.write(row, 7, "INSTRUCTOR")
 	sheet.write(row, 8, "TA")
 	sheet.write(row, 9, "LOCATION")
-	sheet.write(row, 10, "TOTAL SEATS REMAINING")
-	sheet.write(row, 11, "CURRENTLY REGISTERED")
-	sheet.write(row, 12, "GENERAL SEATS REMAINING")
-	sheet.write(row, 13, "RESTRICTED SEATS REMAINING")
+	sheet.write(row, 10, "COURSE GRADE LINK")
+	sheet.write(row, 11, "TOTAL SEATS REMAINING")
+	sheet.write(row, 12, "CURRENTLY REGISTERED")
+	sheet.write(row, 13, "GENERAL SEATS REMAINING")
+	sheet.write(row, 14, "RESTRICTED SEATS REMAINING")
 
 	return row + 1 
 
@@ -97,10 +98,11 @@ def write_course_info(course, row, sheet):
 	sheet.write(row, 1, course.section)
 	sheet.write(row, 2, course.course_name)
 	sheet.write(row, 3, course.activity)
-	sheet.write(row, 10, course.seat_summary["total_seats_remaining"])
-	sheet.write(row, 11, course.seat_summary["currently_registered"])
-	sheet.write(row, 12, course.seat_summary["general_seats_remaining"])
-	sheet.write(row, 13, course.seat_summary["restricted_seats_remaining"])
+	sheet.write(row, 10, course.course_grades_link)
+	sheet.write(row, 11, course.seat_summary["total_seats_remaining"])
+	sheet.write(row, 12, course.seat_summary["currently_registered"])
+	sheet.write(row, 13, course.seat_summary["general_seats_remaining"])
+	sheet.write(row, 14, course.seat_summary["restricted_seats_remaining"])
 	
 	# loop through schedule for possible multiple schedules 
 	for i in range(len(course.schedules)):
@@ -218,7 +220,7 @@ def update_course_detail(driver, course, details, has_detail_table):
 	return course 
 
 # main 
-base_url = "https://courses.students.ubc.ca"
+slacknotes_url = "https://slacknotes.com/grades/"
 url = "https://courses.students.ubc.ca/cs/courseschedule?tname=subj-all-departments&sessyr=2019&sesscd=S&pname=subjarea"
 
 # initialize workbook
@@ -243,7 +245,13 @@ for subject, subject_link in ordered_subject_links.items():
 
 	# click every course link in the list 
 	ordered_course_links = collections.OrderedDict(sorted(course_links.items())) 
-	for course, course_link in ordered_course_links.items(): 
+	for c, course_link in ordered_course_links.items(): 
+		# concatenate course name (ie. CPSC213)
+		course_name_list = c.split()[:2]
+		course_name_list[-1] = course_name_list[-1][:-1] if len(course_name_list[-1]) > 3 else course_name_list[-1] 
+		course_name = course_name_list[0] + course_name_list[1]
+		course_grades_link = str(slacknotes_url) + str(course_name) 
+
 		# click on the link
 		page = click_link(driver, course_link)
 
@@ -256,7 +264,7 @@ for subject, subject_link in ordered_subject_links.items():
 		for section, section_link in ordered_section_links.items(): 
 			page = click_link(driver, section_link)
 
-			course = init_course(page, section_link) 
+			course = init_course(page, section_link, course_grades_link) 
 
 			# fetch the table with course detail 
 			detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 

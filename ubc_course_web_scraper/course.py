@@ -1,11 +1,12 @@
 class Course(): 
 	"""Course class that contains all important information"""
 
-	def __init__(self, link, section, activity, course_name): 
+	def __init__(self, link, section, activity, course_name, course_grades_link): 
 		"""Initialize course link"""
 		self.schedules = []
 		self.instructors = [] 
 		self.link = link
+		self.course_grades_link = course_grades_link 
 		self.section = section 
 		self.activity = activity
 		self.course_name = course_name
@@ -47,7 +48,7 @@ class Course():
 		
 	def display_details(self): 
 		"""Return string representation of the course details"""
-		return "LINK: " + self.link + "\nSECTION: " + self.section + "\nACTIVITY: " + self.activity + "\nCOURSE NAME: " + self.course_name + "\nTERM: " + str(self.term) + "\n" + self.display_schedule() 
+		return "LINK: " + self.link + "\nGRADES LINK: " + self.course_grades_link + "\nSECTION: " + self.section + "\nACTIVITY: " + self.activity + "\nCOURSE NAME: " + self.course_name + "\nTERM: " + str(self.term) + "\n" + self.display_schedule() 
 
 	def display_seat_summary(self): 
 		"""Return string representation of the course seat summary"""
