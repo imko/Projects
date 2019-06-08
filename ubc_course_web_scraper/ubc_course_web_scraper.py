@@ -9,6 +9,7 @@ import xlwt
 from xlwt import Workbook 
 
 from course import Course 
+from ubc_course_database import UBCDatabase
 
 def init_course(page, section_link, course_grades_link) :
 	"""Initialize Course with section_id, activity, course_name, and link to the course"""
@@ -220,6 +221,11 @@ def update_course_detail(driver, course, details, has_detail_table):
 	return course 
 
 def run(slacknotes_url, url):
+	# initialize database 
+	db = UBCDatabase() 
+	# db.reset()
+	db.create_table() 
+
 	# initialize workbook
 	workbook, sheet, row = init_workbook() 
 
@@ -246,8 +252,9 @@ def run(slacknotes_url, url):
 			# concatenate course name (ie. CPSC213)
 			course_name_list = c.split()[:2]
 			course_name_list[-1] = course_name_list[-1][:-1] if len(course_name_list[-1]) > 3 else course_name_list[-1] 
-			course_name = course_name_list[0] + course_name_list[1]
-			course_grades_link = str(slacknotes_url) + str(course_name) 
+			course_name = course_name_list[0]
+			course_number = course_name_list[1] 
+			course_grades_link = str(slacknotes_url) + str(course_name_list[0] + course_name_list[1]) 
 
 			# click on the link
 			page = click_link(driver, course_link)
@@ -274,10 +281,12 @@ def run(slacknotes_url, url):
 				sections.append(update_course_detail(driver, course, details, has_detail_table))
 
 				# write to excel sheet 
-				row = write_to_excel_sheet(course, row, sheet) 
-				
+				# row = write_to_excel_sheet(course, row, sheet) 
+				# store in database 
+				db.data_entry(course_name, course_number, course)
+
 				# TESTING 
-				print(str(section) + str(course.schedules) + " --> Successful") 
+				print(str(section) + " --> Successful") 
 
 				# go back to previous page (ie. page of list of sections) 
 				driver.back() 
