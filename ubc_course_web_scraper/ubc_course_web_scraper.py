@@ -11,12 +11,21 @@ from xlwt import Workbook
 from course import Course 
 from ubc_course_database import UBCDatabase
 
-def init_course(page, section_link, course_grades_link) :
+def init_course(driver, page, section_link, course_grades_link) :
 	"""Initialize Course with section_id, activity, course_name, and link to the course"""
-	pivot = -1 if len(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()) < 5 else -2 
-	section_id = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[:pivot])
-	activity = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[pivot:])[1:-1]
-	course_name = page.select("body > div.container > div.content.expand > h5")[0].text
+	header = ""
+	for t in driver.find_elements_by_xpath("/html/body/div[2]/div[4]/h4"): 
+		header += t.text
+	pivot = -1 if len(str(header).split()) < 5 else -2 
+	section_id = " ".join(str(header).split()[:pivot])
+	activity = " ".join(str(header).split()[pivot:])[1:-1]
+	course_name = ""
+	for t in driver.find_elements_by_xpath("/html/body/div[2]/div[4]/h5"):
+		course_name += t.text 
+	# pivot = -1 if len(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()) < 5 else -2 
+	# section_id = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[:pivot])
+	# activity = " ".join(str(page.select("body > div.container > div.content.expand > h4")[0].text).split()[pivot:])[1:-1]
+	# course_name = page.select("body > div.container > div.content.expand > h5")[0].text
 
 	return Course(section_link, section_id, activity, course_name, course_grades_link)
 
@@ -268,7 +277,7 @@ def run(slacknotes_url, url):
 			for section, section_link in ordered_section_links.items(): 
 				page = click_link(driver, section_link)
 
-				course = init_course(page, section_link, course_grades_link) 
+				course = init_course(driver, page, section_link, course_grades_link) 
 
 				# fetch the table with course detail 
 				detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
@@ -295,6 +304,7 @@ def run(slacknotes_url, url):
 		workbook.save("ubc_course_data.xls")
 		driver.back() 
 
+	db.close()
 	driver.quit() 
 
 # main 
