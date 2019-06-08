@@ -219,74 +219,77 @@ def update_course_detail(driver, course, details, has_detail_table):
 
 	return course 
 
+def run(slacknotes_url, url):
+	# initialize workbook
+	workbook, sheet, row = init_workbook() 
+
+	# open the website 
+	driver = webdriver.Chrome() 
+	driver.get(url)
+
+	# fetch every link of the subjects 
+	subject_links = fetch_subject_links(driver)
+
+	# click the subject link 
+	subject_dict = {} 
+	ordered_subject_links = collections.OrderedDict(sorted(subject_links.items()))
+	for subject, subject_link in ordered_subject_links.items(): 
+		# click on the link
+		page = click_link(driver, subject_link)
+
+		# fetch all the links to the courses 
+		course_links = fetch_course_links(driver)
+
+		# click every course link in the list 
+		ordered_course_links = collections.OrderedDict(sorted(course_links.items())) 
+		for c, course_link in ordered_course_links.items(): 
+			# concatenate course name (ie. CPSC213)
+			course_name_list = c.split()[:2]
+			course_name_list[-1] = course_name_list[-1][:-1] if len(course_name_list[-1]) > 3 else course_name_list[-1] 
+			course_name = course_name_list[0] + course_name_list[1]
+			course_grades_link = str(slacknotes_url) + str(course_name) 
+
+			# click on the link
+			page = click_link(driver, course_link)
+
+			# fetch all the links to the sections 
+			section_links = fetch_section_links(driver)
+
+			# click every section link in the list 
+			sections = [] 
+			ordered_section_links = collections.OrderedDict(sorted(section_links.items())) 
+			for section, section_link in ordered_section_links.items(): 
+				page = click_link(driver, section_link)
+
+				course = init_course(page, section_link, course_grades_link) 
+
+				# fetch the table with course detail 
+				detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
+
+				# fetch a list of details and check if detail table is present 
+				details, has_detail_table = fetch_details(detail_table)
+				
+				# check if the course does NOT have detail table 
+				# add course to the list of course sections 
+				sections.append(update_course_detail(driver, course, details, has_detail_table))
+
+				# write to excel sheet 
+				row = write_to_excel_sheet(course, row, sheet) 
+				
+				# TESTING 
+				print(str(section) + str(course.schedules) + " --> Successful") 
+
+				# go back to previous page (ie. page of list of sections) 
+				driver.back() 
+
+		# save to excel file every subject 
+		workbook.save("ubc_course_data.xls")
+		driver.back() 
+
+	driver.quit() 
+
 # main 
 slacknotes_url = "https://slacknotes.com/grades/"
 url = "https://courses.students.ubc.ca/cs/courseschedule?tname=subj-all-departments&sessyr=2019&sesscd=S&pname=subjarea"
 
-# initialize workbook
-workbook, sheet, row = init_workbook() 
-
-# open the website 
-driver = webdriver.Chrome() 
-driver.get(url)
-
-# fetch every link of the subjects 
-subject_links = fetch_subject_links(driver)
-
-# click the subject link 
-subject_dict = {} 
-ordered_subject_links = collections.OrderedDict(sorted(subject_links.items()))
-for subject, subject_link in ordered_subject_links.items(): 
-	# click on the link
-	page = click_link(driver, subject_link)
-
-	# fetch all the links to the courses 
-	course_links = fetch_course_links(driver)
-
-	# click every course link in the list 
-	ordered_course_links = collections.OrderedDict(sorted(course_links.items())) 
-	for c, course_link in ordered_course_links.items(): 
-		# concatenate course name (ie. CPSC213)
-		course_name_list = c.split()[:2]
-		course_name_list[-1] = course_name_list[-1][:-1] if len(course_name_list[-1]) > 3 else course_name_list[-1] 
-		course_name = course_name_list[0] + course_name_list[1]
-		course_grades_link = str(slacknotes_url) + str(course_name) 
-
-		# click on the link
-		page = click_link(driver, course_link)
-
-		# fetch all the links to the sections 
-		section_links = fetch_section_links(driver)
-
-		# click every section link in the list 
-		sections = [] 
-		ordered_section_links = collections.OrderedDict(sorted(section_links.items())) 
-		for section, section_link in ordered_section_links.items(): 
-			page = click_link(driver, section_link)
-
-			course = init_course(page, section_link, course_grades_link) 
-
-			# fetch the table with course detail 
-			detail_table = driver.find_element_by_xpath("/html/body/div[2]/div[4]/table[2]/tbody") 
-
-			# fetch a list of details and check if detail table is present 
-			details, has_detail_table = fetch_details(detail_table)
-			
-			# check if the course does NOT have detail table 
-			# add course to the list of course sections 
-			sections.append(update_course_detail(driver, course, details, has_detail_table))
-
-			# write to excel sheet 
-			row = write_to_excel_sheet(course, row, sheet) 
-			
-			# TESTING 
-			print(str(section) + str(course.schedules) + " --> Successful") 
-
-			# go back to previous page (ie. page of list of sections) 
-			driver.back() 
-
-	# save to excel file every subject 
-	workbook.save("ubc_course_data.xls")
-	driver.back() 
-
-driver.quit() 
+run(slacknotes_url, url) 
